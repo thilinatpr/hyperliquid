@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Admin Login</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 100px;
+      background-color: #121212;
+      color: #eaeaea;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-top: 20px;
+      background-color: #6fcfff;
+      color: #121212;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #4a9bd9;
+    }
+    #status {
+      margin-top: 20px;
+      font-weight: bold;
+      color: #6fcfff;
+    }
+  </style>
+</head>
+<body>
+  <h1>Login with MetaMask</h1>
+  <button id="login-btn">Login with MetaMask</button>
+  <div id="status"></div>
+
+  <script>
+    // TODO: Replace with your admin address in lowercase
+    const ADMIN_ADDRESS = "0xef19253D6De94b0313F6e4d198ee21b022C35AEe"; 
+
+    async function loginWithMetaMask() {
+      const statusEl = document.getElementById("status");
+
+      if (typeof window.ethereum === 'undefined') {
+        statusEl.textContent = "MetaMask not detected!";
+        return;
+      }
+
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+        const userAddress = accounts[0].toLowerCase();
+        const adminAddress = ADMIN_ADDRESS.toLowerCase();
+
+        if (userAddress !== adminAddress) {
+          statusEl.textContent = "Access denied. You are not the admin.";
+          return;
+        }
+
+        // Fetch nonce from backend for this user address
+        const nonceResp = await fetch(`/api/nonce/${userAddress}`);
+        if (!nonceResp.ok) {
+          const err = await nonceResp.json();
+          statusEl.textContent = `Error getting nonce: ${err.error || nonceResp.statusText}`;
+          return;
+        }
+        const { nonce } = await nonceResp.json();
+
+        // Ask user to sign nonce string
+        const signature = await window.ethereum.request({
+          method: 'personal_sign',
+          params: [nonce, userAddress],
+        });
+
+        // Send signature + address to backend to log in
+        const loginResp = await fetch('/api/login-metamask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: userAddress, signature }),
+        });
+
+        if (loginResp.ok) {
+          statusEl.textContent = 'Access granted. Redirecting to admin panel...';
+          setTimeout(() => {
+            window.location.href = '/admin.html';
+          }, 1500);
+        } else {
+          const err = await loginResp.json();
+          statusEl.textContent = `Login failed: ${err.error || loginResp.statusText}`;
+        }
+      } catch (err) {
+        statusEl.textContent = "Error: " + err.message;
+      }
+    }
+
+    document.getElementById("login-btn").addEventListener("click", loginWithMetaMask);
+  </script>
+</body>
+</html>

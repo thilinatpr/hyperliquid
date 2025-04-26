@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>HyperLiquid Tracker - Admin & Notifications</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #121212;
+      color: #eaeaea;
+      padding: 1.5rem;
+      max-width: 800px;
+      margin: auto;
+    }
+
+    h2 {
+      margin-bottom: 1rem;
+      color: #6fcfff;
+    }
+
+    .tabs {
+      display: flex;
+      margin-bottom: 1.5rem;
+      border-bottom: 2px solid #3f71c3;
+    }
+
+    .tab {
+      flex: 1;
+      text-align: center;
+      padding: 1rem;
+      cursor: pointer;
+      background: #1e1e1e;
+      border-radius: 8px 8px 0 0;
+      font-weight: bold;
+      transition: background 0.3s ease;
+      color: #6fcfff;
+      user-select: none;
+    }
+
+    .tab.active {
+      background: #3f71c3;
+      color: white;
+    }
+
+    .tab-content {
+      display: none;
+      background: #1e1e1e;
+      padding: 1.5rem;
+      border-radius: 0 0 8px 8px;
+      min-height: 200px;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 1.2rem;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.6rem;
+      margin-top: 0.3rem;
+      border: 1px solid #444;
+      border-radius: 6px;
+      font-size: 1rem;
+      background-color: #222;
+      color: #eee;
+      outline: none;
+    }
+
+    button {
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      color: white;
+      background-color: #3f71c3;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-top: 1rem;
+    }
+
+    button:hover {
+      background-color: #2a5084;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin-top: 1rem;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    li {
+      background: #2d2d2d;
+      padding: 0.75rem;
+      margin-bottom: 0.5rem;
+      border-left: 5px solid #6fcfff;
+      border-radius: 5px;
+      word-break: break-word;
+    }
+
+    .coin-list {
+      margin-top: 0.5rem;
+      padding-left: 1rem;
+      list-style: disc;
+      color: #6fcfff;
+    }
+
+    .status-bar {
+      background: #4caf50;
+      color: #fff;
+      padding: 0.5rem 1rem;
+      border-radius: 5px;
+      font-family: monospace;
+      user-select: text;
+      margin-bottom: 1rem;
+    }
+
+    #logoutBtn {
+      float: right;
+      background-color: #dc3545;
+    }
+
+    #logoutBtn:hover {
+      background-color: #a92b2b;
+    }
+
+    .form-row {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>HyperLiquid Tracker</h2>
+
+  <div>
+    <!-- Display logged in Ethereum address -->
+    <div class="status-bar" id="loggedInAddress">You are logged in as: <span id="ethAddressDisplay">Loading...</span></div>
+    <button id="logoutBtn">Logout</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="admin-panel">Admin Panel</div>
+    <div class="tab" data-tab="notifications">Notifications</div>
+  </div>
+
+  <div class="tab-content active" id="admin-panel">
+    <p><em>Configure HyperLiquid account details</em></p>
+
+    <form id="configForm">
+      <label for="privateKey">Wallet Private Key (0x...):</label>
+      <input type="password" id="privateKey" name="privateKey" placeholder="0x..." required />
+
+      <label for="walletAddress">Wallet Address (0x...):</label>
+      <input type="text" id="walletAddress" name="walletAddress" placeholder="0x..." required />
+
+      <label for="discordWebhook">Discord Webhook URL:</label>
+      <input type="url" id="discordWebhook" name="discordWebhook" placeholder="https://discord.com/api/webhooks/..." required />
+
+      <label for="tokens">Tokens to Monitor (Ctrl/Cmd+click to select multiple):</label>
+      <select id="tokens" name="tokens" multiple size="4" required>
+        <option value="SOL">SOL</option>
+        <option value="BTC">BTC</option>
+        <option value="ETH">ETH</option>
+        <option value="USDT">USDT</option>
+      </select>
+      
+      <label for="minSize">Minimum Trigger Size:</label>
+      <input type="number" id="minSize" name="minSize" step="0.01" min="0.01" value="0.1" required />
+      
+      <button type="submit">Save and Start Tracking</button>
+    </form>
+    <button id="stopTrackingBtn" type="button" style="margin-top:1rem; background-color: #dc3545; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer;">
+        Stop Tracking
+      </button>
+    <div id="stopStatus" style="margin-top: 0.5rem;"></div>
+    <div id="configStatus" style="margin-top:1rem; color:#6fcfff;"></div>
+    
+</div>
+
+  <div class="tab-content" id="notifications">
+    <h3>Recent Alerts</h3>
+    <ul id="notificationList"></ul>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+
+    // Tab switching
+    const tabs = document.querySelectorAll('.tab');
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.getAttribute('data-tab');
+        tabContents.forEach(tc => {
+          if (tc.id === target) tc.classList.add('active');
+          else tc.classList.remove('active');
+        });
+      });
+    });
+
+    const loggedInAddressEl = document.getElementById('ethAddressDisplay');
+    const notificationList = document.getElementById('notificationList');
+    const configForm = document.getElementById('configForm');
+    const configStatus = document.getElementById('configStatus');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    // Fetch existing config on load
+    async function fetchConfig() {
+      try {
+        const resp = await fetch('/api/getConfig', {
+          credentials: 'include'  // Include cookies for session
+        });
+        if (resp.ok) {
+          const config = await resp.json();
+
+          // Display ethAddress from session by trying to infer from config.walletAddress or backend (no direct API for ethAddress)
+          // We can update the loggedInAddress later by fetching nonce or use config.walletAddress as placeholder for now
+          loggedInAddressEl.textContent = config.walletAddress || 'Unknown address';
+
+          // Fill form fields
+          document.getElementById('privateKey').value = config.privateKey || '';
+          document.getElementById('walletAddress').value = config.walletAddress || '';
+          document.getElementById('discordWebhook').value = config.webhookUrl || '';
+          document.getElementById('minSize').value = config.minSize ?? 0.1;
+
+          // Reset token selections
+          const tokensSelect = document.getElementById('tokens');
+          if (Array.isArray(config.tokens)) {
+            for (const option of tokensSelect.options) {
+              option.selected = config.tokens.includes(option.value);
+            }
+          }
+
+        } else if (resp.status === 401) {
+          // Unauthorized - redirect to login page
+          window.location.href = '/login.html';
+        } else {
+          configStatus.textContent = 'Failed to load configuration.';
+          configStatus.style.color = '#dc3545';
+        }
+      } catch (err) {
+        configStatus.textContent = 'Error loading configuration.';
+        configStatus.style.color = '#dc3545';
+        console.error(err);
+      }
+    }
+
+    // Save config form submit handler
+    configForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      configStatus.textContent = '';
+
+      // Get entered data
+      const privateKey = document.getElementById('privateKey').value.trim();
+      const walletAddress = document.getElementById('walletAddress').value.trim();
+      const webhookUrl = document.getElementById('discordWebhook').value.trim();
+      const tokensSelect = document.getElementById('tokens');
+      const tokens = Array.from(tokensSelect.selectedOptions).map(o => o.value);
+      const minSize = parseFloat(document.getElementById('minSize').value);
+
+      try {
+        const resp = await fetch('/api/setConfig', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ privateKey, walletAddress, webhookUrl, tokens, minSize }),
+          credentials: 'include'  // Include cookies
+        });
+        const result = await resp.json();
+        if (resp.ok) {
+          configStatus.style.color = '#4caf50';
+          configStatus.textContent = '✅ Settings saved successfully and monitoring started.';
+        } else {
+          configStatus.style.color = '#dc3545';
+          configStatus.textContent = `❌ Error: ${result.error || 'Unknown error'}`;
+          if (resp.status === 401) {
+            // Redirect to login on unauthorized
+            setTimeout(() => window.location.href = '/login.html', 2000);
+          }
+        }
+      } catch (err) {
+        configStatus.style.color = '#dc3545';
+        configStatus.textContent = `❌ Network error: ${err.message}`;
+      }
+    });
+
+    // Listen for alerts from backend via socket.io
+    socket.on('fill_alert', (message) => {
+      const li = document.createElement('li');
+      li.textContent = message;
+      notificationList.prepend(li);
+
+      // Limit to last 50
+      while (notificationList.children.length > 50) {
+        notificationList.removeChild(notificationList.lastChild);
+      }
+    });
+
+    // Logout button handler
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        const resp = await fetch('/api/logout', {
+          method: 'POST',
+          credentials: 'include'
+        });
+        if (resp.ok) {
+          window.location.href = '/login.html';
+        } else {
+          alert('Logout failed, try again.');
+        }
+      } catch (err) {
+        alert('Error logging out: ' + err.message);
+      }
+    });
+
+    const stopTrackingBtn = document.getElementById('stopTrackingBtn');
+  const stopStatus = document.getElementById('stopStatus');
+
+  stopTrackingBtn.addEventListener('click', async () => {
+    stopStatus.textContent = '';
+    try {
+      const resp = await fetch('/api/stopTracking', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        stopStatus.style.color = '#4caf50';
+        stopStatus.textContent = json.message || 'Monitoring stopped successfully.';
+      } else if (resp.status === 401) {
+        stopStatus.style.color = '#dc3545';
+        stopStatus.textContent = 'Unauthorized. Please login again.';
+        setTimeout(() => window.location.href = '/login.html', 1500);
+      } else {
+        const errorJson = await resp.json();
+        stopStatus.style.color = '#dc3545';
+        stopStatus.textContent = errorJson.error || 'Failed to stop monitoring.';
+      }
+    } catch (err) {
+      stopStatus.style.color = '#dc3545';
+      stopStatus.textContent = 'Network error: ' + err.message;
+    }
+  });
+    // On page load - fetch config (also validates if logged in)
+    (async () => {
+      await fetchConfig();
+    })();
+
+  </script>
+</body>
+</html>

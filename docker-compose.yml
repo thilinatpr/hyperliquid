@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  app:
+    image: hyper-alerts:latest
+    container_name: hyper-alerts
+    ports:
+      - "3000:3000"
+    volumes:
+      - data-db-volume:/usr/src/app/data
+      - ./public:/usr/src/app/public:ro
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    user: root  # TEMPORARY run as root to fix permissions
+    command: >
+      sh -c "chown -R node:node /usr/src/app/data &&
+             su node -c 'node src/server.js'"
+
+volumes:
+  data-db-volume:
+    driver: local
